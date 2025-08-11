@@ -1,110 +1,51 @@
+# -------- main.tf --------
+terraform {
+  required_version = ">= 1.7.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+
+  # Optional: when you’re ready to use remote state, fill this and uncomment.
+  # backend "s3" {
+  #   bucket         = "your-unique-tf-state-bucket"
+  #   key            = "global/terraform.tfstate"
+  #   region         = "us-east-1"
+  #   dynamodb_table = "your-tf-locks-table"
+  #   encrypt        = true
+  # }
+}
+
 provider "aws" {
-  region = var.aws_region
-}
+  region  = var.aws_region
+  profile = var.aws_profile
 
-# VPC
-resource "aws_vpc" "main_vpc" {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_support   = true
-  enable_dns_hostnames = true
-
-  tags = {
-    Name = "main_vpc"
+  default_tags {
+    tags = var.tags
   }
 }
 
-# Internet Gateway
-resource "aws_internet_gateway" "igw" {
-  vpc_id = aws_vpc.main_vpc.id
+# No resources yet—just verify connectivity safely:
+data "aws_caller_identity" "current" {}
+data "aws_region"          "current" {}
 
-  tags = {
-    Name = "main_igw"
-  }
+output "aws_account_id" {
+  value = data.aws_caller_identity.current.account_id
 }
 
-# Public Subnet
-resource "aws_subnet" "public_subnet" {
-  vpc_id                  = aws_vpc.main_vpc.id
-  cidr_block              = "10.0.1.0/24"
-  map_public_ip_on_launch = true
-  availability_zone       = var.aws_availability_zone
-
-  tags = {
-    Name = "public_subnet"
-  }
+output "aws_region_effective" {
+  value = data.aws_region.current.name
 }
 
-# Route Table
-resource "aws_route_table" "public_rt" {
-  vpc_id = aws_vpc.main_vpc.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.igw.id
-  }
-
-  tags = {
-    Name = "public_rt"
-  }
-}
-
-# Associate Route Table with Subnet
-resource "aws_route_table_association" "public_assoc" {
-  subnet_id      = aws_subnet.public_subnet.id
-  route_table_id = aws_route_table.public_rt.id
-}
-
-# Security Group for EC2
-resource "aws_security_group" "ec2_sg" {
-  name        = "ec2_sg"
-  description = "Allow SSH access"
-  vpc_id      = aws_vpc.main_vpc.id
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "ec2_sg"
-  }
-}
-
-# Key Pair
-resource "aws_key_pair" "my_key" {
-  key_name   = "my-key"
-  public_key = file(var.public_key_path)
-}
-
-# EC2 Instance
-resource "aws_instance" "my_ec2" {
-  ami                         = var.ami_id
-  instance_type               = "t2.micro"
-  subnet_id                   = aws_subnet.public_subnet.id
-  associate_public_ip_address = true
-  key_name                    = aws_key_pair.my_key.key_name
-  vpc_security_group_ids      = [aws_security_group.ec2_sg.id]
-
-  tags = {
-    Name = "my_ec2_instance"
-  }
-}
-
-# S3 Bucket (unchanged)
-resource "aws_s3_bucket" "my_bucket" {
-  bucket = var.s3_bucket_name
-  acl    = "private"
-
-  tags = {
-    Name = "my_s3_bucket"
-  }
-}
+# If you want to test creating something later, uncomment this S3 bucket:
+# resource "aws_s3_bucket" "demo" {
+#   bucket = "dvir-terraform-demo-${random_id_suffix}"
+# }
+#
+# locals {
+#   random_id_suffix = substr(replace(uuid(), "-", ""), 0, 8)
+# }
+# -------- end --------
